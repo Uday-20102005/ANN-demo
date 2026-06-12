@@ -1,121 +1,120 @@
+# app.py
+
 import streamlit as st
-import tensorflow as tf
 import numpy as np
-import pickle
+import os
+import joblib
+from tensorflow.keras.models import load_model
 
 st.set_page_config(
-    page_title="ANN Customer Churn Prediction",
+    page_title="Customer Churn Prediction",
     page_icon="📊",
-    layout="centered"
+    layout="wide"
 )
 
-# Load model and preprocessors
-model = tf.keras.models.load_model("models/ann_churn.keras")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-with open("models/scaler.pkl", "rb") as f:
-    scaler = pickle.load(f)
+MODEL_PATH = os.path.join(BASE_DIR, "churn_model.keras")
+SCALER_PATH = os.path.join(BASE_DIR, "scaler.pkl")
 
-with open("models/geography_encoder.pkl", "rb") as f:
-    geography_encoder = pickle.load(f)
+@st.cache_resource
+def load_artifacts():
+    model = load_model(MODEL_PATH)
+    scaler = joblib.load(SCALER_PATH)
+    return model, scaler
 
-with open("models/gender_encoder.pkl", "rb") as f:
-    gender_encoder = pickle.load(f)
+model, scaler = load_artifacts()
 
-st.title("ANN Customer Churn Prediction")
 
-st.markdown("Enter customer details below.")
+st.title("📊 Customer Churn Prediction Using ANN")
+st.markdown("Predict whether a customer is likely to leave the bank or stay.")
 
-credit_score = st.slider(
-    "Credit Score",
-    min_value=300,
-    max_value=900,
-    value=650
-)
+tab1, tab2 = st.tabs(["Prediction", "Model Information"])
 
-geography = st.selectbox(
-    "Geography",
-    geography_encoder.classes_.tolist()
-)
+with tab1:
 
-gender = st.selectbox(
-    "Gender",
-    gender_encoder.classes_.tolist()
-)
+    st.subheader("Enter Customer Details")
 
-age = st.slider(
-    "Age",
-    min_value=18,
-    max_value=100,
-    value=35
-)
+    col1, col2 = st.columns(2)
 
-tenure = st.slider(
-    "Tenure",
-    min_value=0,
-    max_value=10,
-    value=5
-)
+    with col1:
+        credit_score = st.number_input(
+            "Credit Score",
+            min_value=300,
+            max_value=900,
+            value=650
+        )
 
-balance = st.number_input(
-    "Balance",
-    min_value=0.0,
-    value=50000.0,
-    step=1000.0
-)
+        age = st.number_input(
+            "Age",
+            min_value=18,
+            max_value=100,
+            value=35
+        )
 
-num_products = st.slider(
-    "Number of Products",
-    min_value=1,
-    max_value=4,
-    value=1
-)
+    with col2:
+        balance = st.number_input(
+            "Account Balance",
+            min_value=0.0,
+            value=50000.0
+        )
 
-has_cr_card = st.selectbox(
-    "Has Credit Card",
-    [0, 1]
-)
+        estimated_salary = st.number_input(
+            "Estimated Salary",
+            min_value=0.0,
+            value=60000.0
+        )
 
-is_active_member = st.selectbox(
-    "Is Active Member",
-    [0, 1]
-)
+    if st.button("Predict Churn"):
 
-estimated_salary = st.number_input(
-    "Estimated Salary",
-    min_value=0.0,
-    value=50000.0,
-    step=1000.0
-)
+        data = np.array([
+            [credit_score, age, balance, estimated_salary]
+        ])
 
-if st.button("Predict Churn"):
+        data_scaled = scaler.transform(data)
 
-    geography_encoded = geography_encoder.transform([geography])[0]
-    gender_encoded = gender_encoder.transform([gender])[0]
+        prediction = model.predict(data_scaled)[0][0]
 
-    input_data = np.array([[
-        credit_score,
-        geography_encoded,
-        gender_encoded,
-        age,
-        tenure,
-        balance,
-        num_products,
-        has_cr_card,
-        is_active_member,
-        estimated_salary
-    ]])
+        if prediction > 0.5:
+            st.error("⚠️ Customer is likely to Churn")
+            st.write(f"Churn Probability: **{prediction*100:.2f}%**")
+        else:
+            st.success("✅ Customer is likely to Stay")
+            st.write(f"Retention Probability: **{(1-prediction)*100:.2f}%**")
 
-    input_scaled = scaler.transform(input_data)
 
-    prediction = model.predict(input_scaled, verbose=0)
+with tab2:
 
-    churn_probability = float(prediction[0][0])
+    st.subheader("ANN Architecture")
 
-    st.subheader(
-        f"Churn Probability: {churn_probability:.2%}"
-    )
+    st.markdown("""
+    - Input Layer (4 Features)
+    - Dense Layer (16 Neurons, ReLU)
+    - Dense Layer (8 Neurons, ReLU)
+    - Output Layer (1 Neuron, Sigmoid)
+    """)
 
-    if churn_probability >= 0.5:
-        st.error("Customer is likely to leave.")
-    else:
-        st.success("Customer is likely to stay.")
+    st.subheader("Input Features")
+
+    st.write("""
+    - CreditScore
+    - Age
+    - Balance
+    - EstimatedSalary
+    """)
+
+    st.subheader("Output")
+
+    st.write("""
+    Binary Classification:
+    - 0 → Customer Stays
+    - 1 → Customer Churns
+    """)
+
+    st.subheader("Loss Function")
+
+    st.write("Binary Crossentropy")
+
+    st.subheader("Optimizer")
+
+    st.write("Adam")
